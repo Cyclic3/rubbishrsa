@@ -4,13 +4,12 @@
 
 namespace rubbishrsa {
   private_key private_key::generate(uint_fast16_t bits) {
-    // Apparently we should differ in lengths by a few dgits
-    auto p = generate_prime(bits / 2 + 4);
-    auto q = generate_prime(bits / 2 - 4);
+    // Apparently we should differ in lengths by a few digits
+    // this will differ in length by log10(2^8) = ~3 digits
+    auto p = generate_prime(bits / 2 + 5);
+    auto q = generate_prime(bits / 2 - 5);
 
-    std::cerr << "(p, q) = (" << p.str() << ", " << q.str() << ')' << std::endl
-
-    RUBBISHRSA_LOG(std::cerr << "(p, q) = (" << p.str() << ", " << q.str() << ')' << std::endl);
+    RUBBISHRSA_LOG_INFO(std::cerr << "(p, q) = (" << p.str() << ", " << q.str() << ')' << std::endl);
 
     // We can now start filling in our result
     private_key ret;

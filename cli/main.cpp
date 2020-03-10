@@ -3,7 +3,7 @@
 
 
 int main() {
-  auto key = rubbishrsa::private_key::generate(16);
+  auto key = rubbishrsa::private_key::generate(2048);
 
   rubbishrsa::bigint msg = 69;
 

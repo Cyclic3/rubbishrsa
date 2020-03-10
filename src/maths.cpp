@@ -29,20 +29,52 @@ namespace rubbishrsa {
     return (a / egcd(a, b).gcd) * b;
   }
 
+  using egcd_matrix_t = std::array<std::array<bigint, 3>, 2>;
+
+  // Pretty-prints the array
+  void egcd_log_matrix(const egcd_matrix_t& state) {
+    std::array<std::array<std::string, 3>, 2> string_matrix;
+    std::array<size_t, 3> max_len = { 0, 0, 0 };
+    // Pass 1: get the maximum length, and generate the strings
+    for (size_t row_i = 0; row_i < 2; ++row_i) {
+      for (size_t column_i = 0; column_i < 3; ++column_i) {
+        auto& res = (string_matrix[row_i][column_i] = state[row_i][column_i].str());
+        auto& target = max_len[column_i];
+        if (res.size() > target)
+          target = res.size();
+      }
+    }
+
+    std::cerr << "| "
+              << std::setw(max_len[0]) << string_matrix[0][0] << "  "
+              << std::setw(max_len[1]) << string_matrix[0][1]
+              << " | " << std::setw(max_len[2]) << string_matrix[0][2] << " |"
+              << std::endl
+              << "| "
+              << std::setw(max_len[0]) << string_matrix[1][0] << "  "
+              << std::setw(max_len[1]) << string_matrix[1][1]
+              << " | " << std::setw(max_len[2]) << string_matrix[1][2] << " |"
+              << std::endl
+              << std::endl;
+  }
+
   egcd_result egcd(const bigint& a, const bigint& b) {
+    // This is basically a code version of the lecture notes on the topic
+
+    RUBBISHRSA_LOG_TRACE(std::cerr << "Calculating GCD of " << a.str() << " and " << b.str() << std::endl);
+
     if (a <= 0 || b <= 0)
       throw std::invalid_argument("GCD cannot be computer with non-positive argument!");
 
-    // This is basically a code version of the lecture notes on the topic
-
-
     std::array<bigint, 3>col[2];
 
-    using egcd_matrix_t = std::array<std::array<bigint, 3>, 2>;
+
     egcd_matrix_t matrix = {{
       {1, 0, a},
       {0, 1, b}
     }};
+
+    RUBBISHRSA_LOG_TRACE(egcd_log_matrix(matrix));
 
     egcd_result return_value;
 
@@ -54,6 +86,8 @@ namespace rubbishrsa {
       for (size_t i = 0; i < 3; ++i) {
         matrix[0][i] -= matrix[1][i] * a_fit;
       }
+
+      RUBBISHRSA_LOG_TRACE(egcd_log_matrix(matrix));
 
       // Check the a cell to see if we're done
       if (matrix[0][2] == 0)
@@ -67,6 +101,8 @@ namespace rubbishrsa {
       for (size_t i = 0; i < 3; ++i) {
         matrix[1][i] -= matrix[0][i] * b_fit;
       }
+
+      RUBBISHRSA_LOG_TRACE(egcd_log_matrix(matrix));
 
       // Check the b cell to see if we're done
       if (matrix[1][2] == 0)
@@ -136,8 +172,8 @@ next_iter: {}
     bigint min = 1; min <<= (bits - 2);
     bigint max = min; max <<= 1;
 
-    RUBBISHRSA_LOG(
-          std::cerr << "Generating candidate bases between " << min.str()
+    RUBBISHRSA_LOG_TRACE(
+          std::cerr << "Generating prime candidate bases between " << min.str()
                     << " and " << max.str() << std::endl
     );
 
@@ -150,10 +186,12 @@ next_iter: {}
     do {
       // Get a random number, and make it odd.
       ret = dist(rng) * 2 + 1;
-      RUBBISHRSA_LOG(std::cerr << "\tPrime candidate " << ret.str() << std::endl);
+      RUBBISHRSA_LOG_TRACE(std::cerr << "\tPrime candidate " << ret.str() << std::endl);
     }
     // Loop until we get a prime
     while (!is_prime(ret, 128));
+
+    RUBBISHRSA_LOG_TRACE(std::cerr << "Chose " << ret << " as prime" << std::endl);
 
     return ret;
   }

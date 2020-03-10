@@ -1,8 +1,15 @@
 //! A simple system to toggle logging
 #include <iostream>
 
-#ifdef RUBBISHRSA_VERBOSE
-#define RUBBISHRSA_LOG(...) __VA_ARGS__
+#if RUBBISHRSA_VERBOSITY >= 2
+#define RUBBISHRSA_LOG_TRACE(...) __VA_ARGS__
 #else
-#define RUBBISHRSA_LOG(PARAM...)
+#define RUBBISHRSA_LOG_TRACE(...)
+#endif
+
+
+#if RUBBISHRSA_VERBOSITY >= 1
+#define RUBBISHRSA_LOG_INFO(...) __VA_ARGS__
+#else
+#define RUBBISHRSA_LOG_INFO(...)
 #endif
