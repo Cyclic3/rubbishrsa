@@ -17,7 +17,7 @@ file(GLOB_RECURSE ${PROJECT_NAME}_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
 add_library(${PROJECT_NAME} ${${PROJECT_NAME}_SOURCES})
 
 # This enables the logging functionality
-target_compile_definitions(${PROJECT_NAME} PUBLIC RUBBISHRSA_VERBOSE)
+#target_compile_definitions(${PROJECT_NAME} PUBLIC RUBBISHRSA_VERBOSE)
 
 # Begin requirements
 find_package(Boost REQUIRED COMPONENTS system random)

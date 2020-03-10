@@ -15,7 +15,13 @@ namespace rubbishrsa {
 
     // The second coefficient would represent the number of multiples of the modulus,
     // but we don't care about that
-    return res.coefficients.first;
+    //
+    // In addition to this, the egcd will may return a negative number in the same
+    // congruence class. We will normalise this
+    if (res.coefficients.first >= 0)
+      return res.coefficients.first;
+    else
+      return n + res.coefficients.first;
   }
 
   // lcm(a,b) = a/gcd(a,b) * b
@@ -37,6 +43,8 @@ namespace rubbishrsa {
       {1, 0, a},
       {0, 1, b}
     }};
+
+    egcd_result return_value;
 
     while (true) {
       // Calculate the number of multiples of the b cell that fits into the a cell
@@ -70,7 +78,7 @@ namespace rubbishrsa {
   }
 
   // I will use boost random for this stuff, and stl's one doesn't support the bigint
-  bool is_prime(const bigint& candidate, uint_fast8_t certainty_log_2) {
+  bool is_prime(const bigint& candidate, uint_fast8_t certainty_log_4) {
     // We need to get i = 2^exponent * odd
     bigint odd = candidate;
     size_t exponent = 0;
@@ -78,8 +86,8 @@ namespace rubbishrsa {
     // We keep the the non-power of 2 in i
     while (odd % 2 != 0) {
       ++exponent;
-      // A quicker way of doing i *= 2
-      odd <<= 1;
+      // A quicker way of doing i = 2
+      odd >>= 1;
     }
 
     bigint min = 2;
@@ -92,13 +100,14 @@ namespace rubbishrsa {
     bigint candidate_minus_1 = candidate - 1;
 
     bigint x;
-    for (uint_fast8_t iter = 0; iter < certainty_log_2; ++iter) {
-      x = bmp::powm(dist(rng), odd, candidate);
+    for (uint_fast8_t iter = 0; iter < certainty_log_4; ++iter) {
+      bigint a = dist(rng);
+      x = bmp::powm(a, odd, candidate);
       // If we already have a congruence, then we have passed this iter
       if (x == 1 || x == candidate_minus_1)
         continue;
 
-      for (decltype(exponent) i = 0; i < exponent; ++i) {
+      for (decltype(exponent) i = 1; i < exponent; ++i) {
         x = bmp::powm(x, 2, candidate);
         if (x == candidate_minus_1)
           // Only way to quickly leave a nested loop

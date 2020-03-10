@@ -3,6 +3,7 @@
 //! All the number theory goes in here
 
 #include <boost/multiprecision/gmp.hpp>
+#include <boost/multiprecision/cpp_int.hpp>
 
 namespace rubbishrsa {
   // Saves me a lot of typing
@@ -15,7 +16,7 @@ namespace rubbishrsa {
 
   // This is actually implemented in the numeric library I have used, but that would be cheating
   /// Performs the Miller-Rabin primality check `certainty_log_2` times
-  bool is_prime(const bigint& candidate, uint_fast8_t certainty_log_2);
+  bool is_prime(const bigint& candidate, uint_fast8_t certainty_log_4 = 64);
 
   /// Generates a prime that is at least 2^(bits - 1) long.
   //
@@ -31,7 +32,7 @@ namespace rubbishrsa {
   //
   // Instead, we can just calculate it for our special case
   inline bigint carmichael_semiprime(const bigint& p, const bigint& q) {
-    return lcm(p, q);
+    return lcm(p - 1, q - 1);
   }
 
   // Again, exists in our library, but I don't want to cheat

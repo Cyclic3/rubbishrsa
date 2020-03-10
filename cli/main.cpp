@@ -1,14 +1,16 @@
 #include "rubbishrsa/keys.hpp"
+#include "rubbishrsa/log.hpp"
+
 
 int main() {
-//  auto key = rubbishrsa::private_key::generate(64);
+  auto key = rubbishrsa::private_key::generate(16);
 
-//  rubbishrsa::bigint msg = 42069;
+  rubbishrsa::bigint msg = 69;
 
-//  auto ctext = key.raw_encrypt(msg);
-//  auto msg_ = key.raw_decrypt(ctext);
+  auto ctext = key.raw_encrypt(msg);
+  auto msg_ = key.raw_decrypt(ctext);
 
-//  auto res = (msg == msg_);
+  auto res = (msg == msg_);
 
   return 0;
 }
