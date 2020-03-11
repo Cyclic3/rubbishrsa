@@ -23,7 +23,7 @@ target_compile_definitions(${PROJECT_NAME} PUBLIC RUBBISHRSA_VERBOSITY=1)
 find_package(Boost REQUIRED COMPONENTS system random program_options)
 if (WIN32)
   find_package(MPIR REQUIRED)
-  set(MP_LIP MPIR::mpir)
+  set(MP_LIB MPIR::mpir)
   add_compile_options("/std:c++latest")
 else()
   find_package(GMP REQUIRED)
@@ -32,7 +32,6 @@ endif()
 # We parallise prime generation so we can aid low end computers (and Windows)
 find_package(Threads REQUIRED)
 # End requirements
-
 
 target_link_libraries(${PROJECT_NAME}
 PUBLIC # Libraries needed to use this library
