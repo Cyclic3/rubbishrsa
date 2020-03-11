@@ -29,6 +29,8 @@ else()
   find_package(GMP REQUIRED)
   set(MP_LIB GMP::gmp)
 endif()
+# We parallise prime generation so we can aid low end computers (and Windows)
+find_package(Threads REQUIRED)
 # End requirements
 
 
@@ -38,6 +40,7 @@ Boost::boost
 Boost::system
 Boost::random
 Boost::program_options
+Threads::Threads
 ${MP_LIB}
 PRIVATE # Libraries only needed to build this library
 )

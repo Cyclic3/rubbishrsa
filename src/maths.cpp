@@ -7,6 +7,9 @@
 #include <boost/random/random_device.hpp>
 #include <boost/random/uniform_int_distribution.hpp>
 
+#include <atomic>
+#include <thread>
+
 namespace rubbishrsa {
   bigint modinv(const bigint& a, const bigint& n) {
     auto res = egcd(a, n);
@@ -130,7 +133,7 @@ namespace rubbishrsa {
     bigint max = candidate - 2;
     // We don't need a crypto rng here
     thread_local boost::random::mt19937 rng;
-    boost::random::uniform_int_distribution<bigint> dist(std::move(min), std::move(max));
+    const boost::random::uniform_int_distribution<bigint> dist(std::move(min), std::move(max));
 
     // We do this a lot, so precompute it
     bigint candidate_minus_1 = candidate - 1;
@@ -177,19 +180,37 @@ next_iter: {}
                     << " and " << max.str() << std::endl
     );
 
-    // (Almost) always a cryptographically secure rng
-    thread_local boost::random::random_device rng;
     // Our distribution is that of all numbers with the given bit count
-    boost::random::uniform_int_distribution<bigint> dist(std::move(min), std::move(max));
+    const boost::random::uniform_int_distribution<bigint> dist(std::move(min), std::move(max));
 
+    // TO speed up prime generation, we run on each core of the cpu until we find a prime
+    std::vector<std::thread> pool;
     bigint ret;
-    do {
-      // Get a random number, and make it odd.
-      ret = dist(rng) * 2 + 1;
-      RUBBISHRSA_LOG_TRACE(std::cerr << "\tPrime candidate " << ret.str() << std::endl);
+    std::atomic<bool> stop = false;
+    for (unsigned int i = 0; i < std::thread::hardware_concurrency(); ++i) {
+      pool.emplace_back([&, i]() {
+        // Removes warnings about i not being used
+        (void)i;
+        // (Almost) always a cryptographically secure rng
+        thread_local boost::random::random_device rng;
+        // Moving this outside may create some nebulous speed improvement
+        bigint candidate;
+        // We stop looping when a single thread has found a result, and marked stop as true
+        while (!stop) {
+          // Get a random number, and make it odd
+          candidate = dist(rng) * 2 + 1;
+          // We will only log the candidates of one thread so that we keep the output synchronised
+          RUBBISHRSA_LOG_TRACE(if (i == 0) std::cerr << "\tPrime candidate " << candidate.str() << std::endl);
+          // Check if we have a prime, and check if we are the first thread to have one
+          if (is_prime(candidate, 128) && !stop.exchange(true)) {
+            ret = std::move(candidate);
+          }
+        }
+      });
     }
-    // Loop until we get a prime
-    while (!is_prime(ret, 128));
+
+    // Wait for each thread to finish
+    for (auto& thread : pool) thread.join();
 
     RUBBISHRSA_LOG_TRACE(std::cerr << "Chose " << ret << " as prime" << std::endl);
 

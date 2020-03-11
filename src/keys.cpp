@@ -4,6 +4,8 @@
 
 #include <boost/property_tree/json_parser.hpp>
 
+#include <boost/multiprecision/miller_rabin.hpp>
+
 namespace rubbishrsa {
   private_key private_key::generate(uint_fast16_t bits) {
     // Apparently we should differ in lengths by a few digits
@@ -18,6 +20,7 @@ namespace rubbishrsa {
     ret.n = p * q;
     // This is automatically done
     //ret.e = 65537;
+
     auto lambda_n = carmichael_semiprime(p, q);
     ret.d = modinv(ret.e, lambda_n); // $d \equiv e^{-1} \pmod{\lambda(n)}$
 

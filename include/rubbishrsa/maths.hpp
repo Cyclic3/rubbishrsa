@@ -3,11 +3,7 @@
 //! All the number theory goes in here
 
 // The numeric backend is different between windows and unix:
-#ifdef _WIN32
-#include <boost/multiprecision/mpfr.hpp>
-#else
 #include <boost/multiprecision/gmp.hpp>
-#endif
 
 namespace rubbishrsa {
   // Saves me a lot of typing
