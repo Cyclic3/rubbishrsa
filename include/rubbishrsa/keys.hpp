@@ -28,7 +28,7 @@ namespace rubbishrsa {
     // This is not vritual, and so the private key can have a different impl safely
     void serialise(std::ostream&);
     /// Reads the key from the given stream
-    static void deserialise(std::istream&);
+    static public_key deserialise(std::istream&);
 
     // C++ requires this for inhertiable classes
     virtual ~public_key() = default;
@@ -54,7 +54,7 @@ namespace rubbishrsa {
     /// Write the key to the given stream
     void serialise(std::ostream&);
     /// Reads the key from the given stream
-    static void deserialise(std::istream&);
+    static private_key deserialise(std::istream&);
 
     static private_key generate(uint_fast16_t bits);
   };

@@ -28,18 +28,41 @@ namespace rubbishrsa {
     return ret;
   }
 
-  void public_key::serialise(std::ostream& out) {
+  void public_key::serialise(std::ostream& os) {
     boost::property_tree::ptree data;
     data.put("e", e);
     data.put("n", n);
-    boost::property_tree::write_json(out, data, false);
+    boost::property_tree::write_json(os, data, false);
   }
 
-  void private_key::serialise(std::ostream& out) {
+  void private_key::serialise(std::ostream& os) {
     boost::property_tree::ptree data;
     data.put("e", e);
     data.put("d", d);
     data.put("n", n);
-    boost::property_tree::write_json(out, data, false);
+    boost::property_tree::write_json(os, data, false);
+  }
+
+  public_key public_key::deserialise(std::istream& is) {
+    boost::property_tree::ptree data;
+    boost::property_tree::read_json(is, data);
+    public_key ret;
+
+    ret.e = data.get<bigint>("e");
+    ret.n = data.get<bigint>("n");
+
+    return ret;
+  }
+
+  private_key private_key::deserialise(std::istream& is) {
+    boost::property_tree::ptree data;
+    boost::property_tree::read_json(is, data);
+    private_key ret;
+
+    ret.e = data.get<bigint>("e");
+    ret.d = data.get<bigint>("d");
+    ret.n = data.get<bigint>("n");
+
+    return ret;
   }
 }
