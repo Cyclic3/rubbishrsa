@@ -20,7 +20,7 @@ add_library(${PROJECT_NAME} ${${PROJECT_NAME}_SOURCES})
 target_compile_definitions(${PROJECT_NAME} PUBLIC RUBBISHRSA_VERBOSITY=1)
 
 # Begin requirements
-find_package(Boost REQUIRED COMPONENTS system random)
+find_package(Boost REQUIRED COMPONENTS system random program_options)
 find_package(GMP REQUIRED)
 # End requirements
 
@@ -30,6 +30,7 @@ PUBLIC # Libraries needed to use this library
 Boost::boost
 Boost::system
 Boost::random
+Boost::program_options
 GMP::gmp
 PRIVATE # Libraries only needed to build this library
 )
