@@ -1,0 +1,4 @@
+Source: rubbishrsa
+Version: 0.0.1
+Description: The RubbishRSA library
+Build-Depends: boost-system, boost-random, boost-praom-options

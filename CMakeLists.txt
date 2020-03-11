@@ -21,7 +21,13 @@ target_compile_definitions(${PROJECT_NAME} PUBLIC RUBBISHRSA_VERBOSITY=1)
 
 # Begin requirements
 find_package(Boost REQUIRED COMPONENTS system random program_options)
-find_package(GMP REQUIRED)
+if (WIN32)
+  find_package(MPFR REQUIRED)
+  set(MP_LIP MPFR::mpfr)
+else()
+  find_package(GMP REQUIRED)
+  set(MP_LIB GMP::gmp)
+endif()
 # End requirements
 
 
@@ -31,7 +37,7 @@ Boost::boost
 Boost::system
 Boost::random
 Boost::program_options
-GMP::gmp
+${MP_LIB}
 PRIVATE # Libraries only needed to build this library
 )
 

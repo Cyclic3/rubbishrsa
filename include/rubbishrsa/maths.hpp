@@ -3,7 +3,13 @@
 //! All the number theory goes in here
 
 #include <boost/multiprecision/gmp.hpp>
+
+// The numeric backend is different between windows and unix:
+#ifndef _WIN32
 #include <boost/multiprecision/cpp_int.hpp>
+#else
+#include <boost/multiprecision/mpfr.hpp>
+#endif
 
 namespace rubbishrsa {
   // Saves me a lot of typing
