@@ -185,7 +185,7 @@ int main(int argc, char** argv) {
                                       .run(), args2);
     po::notify(args2);
 
-    if (args2.count("hex-message") + args2.count("in") != 1) {
+    if (args2.count("ctext") + args2.count("in") != 1) {
       std::cerr << "ERROR: Exactly one of --ctext, --in must be specified!" << std::endl;
       return 1;
     }
