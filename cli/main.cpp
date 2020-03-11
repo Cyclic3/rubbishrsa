@@ -27,7 +27,15 @@ int main(int argc, char** argv) {
         ("pubkey", po::value(&pubkey_path)->value_name("path"), "An optional path to place a generated public key");
   }
 
-
+  auto print_help = [&]() {
+    std::cout << "Usage: " << argv[0] << " <mode> <options>" << std::endl
+              << std::endl
+              << "Common options: " << std::endl
+              << common_options << std::endl
+              << "gen: generates a RSA key" << std::endl
+              << gen_options << std::endl
+              << std::endl;
+  };
 
 
   // Actually parse the arguments
@@ -36,38 +44,54 @@ int main(int argc, char** argv) {
                                 .options(common_options)
                                 .allow_unregistered()
                                 .run(), args);
+  po::notify(args);
 
   if (args.count("help") || argc <= 2) {
-    std::cout << "Usage: " << argv[0] << " <mode> <options>" << std::endl
-              << std::endl
-              << "Common options: " << std::endl
-              << common_options << std::endl
-              << "gen: generates a RSA key" << std::endl
-              << gen_options << std::endl
-              << std::endl;
-    // We're done
+    print_help();
     return 0;
   }
+  else if (std::string_view{argv[1]} == "gen") {
+    po::variables_map args2;
+    po::store(po::command_line_parser(argc - 1, argv + 1)
+                                      .options(gen_options)
+                                      .run(), args2);
+    po::notify(args2);
 
-  if (std::string_view{argv[1]} == "gen") {
+    if (keysize < 16) {
+      std::cerr << "ERROR: RSA needs a few digits difference in length to be secure, and < 16 bits will ask for a negative number of bits. Sorry" << std::endl;
+      return 1;
+    }
+
+
     auto key = rubbishrsa::private_key::generate(keysize);
 
     std::unique_ptr<std::ofstream> maybe_outfile;
     std::ostream* out;
 
-    if (outfile_path.size() == 0) {
-      out = &std::cout;
-    }
-    else {
+    if (outfile_path.size()) {
       maybe_outfile = std::make_unique<std::ofstream>(outfile_path);
       if (!*maybe_outfile) {
-        std::cerr << "Could not open outfile" << std::endl;
+        std::cerr << "ERROR: Could not open private key output file!" << std::endl;
         return 1;
       }
+      out = maybe_outfile.get();
     }
+    else
+      out = &std::cout;
 
     key.serialise(*out); // TODO: impl this as json
-    out->flush();
+    if (pubkey_path.size()) {
+      std::ofstream pubkey_out{pubkey_path};
+      if (!pubkey_out)
+        // Don't crash, this is only a warning
+        std::cerr << "WARNING: Could not open public key output file!" << std::endl;
+      else
+        static_cast<rubbishrsa::public_key>(key).serialise(pubkey_out);
+    }
+  }
+  else {
+    std::cerr << "Unknown mode '" << argv[1] << '\'' << std::endl << std::endl;
+    print_help();
   }
 
   return 0;

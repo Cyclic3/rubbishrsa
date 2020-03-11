@@ -2,6 +2,8 @@
 
 #include <rubbishrsa/log.hpp>
 
+#include <boost/property_tree/json_parser.hpp>
+
 namespace rubbishrsa {
   private_key private_key::generate(uint_fast16_t bits) {
     // Apparently we should differ in lengths by a few digits
@@ -21,5 +23,20 @@ namespace rubbishrsa {
 
 
     return ret;
+  }
+
+  void public_key::serialise(std::ostream& out) {
+    boost::property_tree::ptree data;
+    data.put("e", e);
+    data.put("n", n);
+    boost::property_tree::write_json(out, data, false);
+  }
+
+  void private_key::serialise(std::ostream& out) {
+    boost::property_tree::ptree data;
+    data.put("e", e);
+    data.put("d", d);
+    data.put("n", n);
+    boost::property_tree::write_json(out, data, false);
   }
 }
