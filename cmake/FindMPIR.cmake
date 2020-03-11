@@ -1,0 +1,16 @@
+find_path(MPIR_INCLUDE_DIRS
+  NAMES mpir.h
+)
+
+find_library(MPIR_LIBRARIES mpir)
+
+add_library(MPIR::gmp UNKNOWN IMPORTED)
+set_target_properties(MPIR::gmp PROPERTIES
+  INTERFACE_INCLUDE_DIRECTORIES ${MPIR_INCLUDE_DIRS}
+  IMPORTED_LOCATION ${MPIR_LIBRARIES}
+
+)
+
+find_package_handle_standard_args(MPIR DEFAULT_MSG
+  MPIR_INCLUDE_DIRS MPIR_LIBRARIES
+)

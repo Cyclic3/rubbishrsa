@@ -22,8 +22,9 @@ target_compile_definitions(${PROJECT_NAME} PUBLIC RUBBISHRSA_VERBOSITY=1)
 # Begin requirements
 find_package(Boost REQUIRED COMPONENTS system random program_options)
 if (WIN32)
-  find_package(MPFR REQUIRED)
-  set(MP_LIP MPFR::mpfr)
+  find_package(MPIR REQUIRED)
+  set(MP_LIP MPIR::mpir)
+  add_compile_options("/std:c++latest")
 else()
   find_package(GMP REQUIRED)
   set(MP_LIB GMP::gmp)
@@ -41,7 +42,7 @@ ${MP_LIB}
 PRIVATE # Libraries only needed to build this library
 )
 
-target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
+target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
@@ -52,4 +53,4 @@ file(GLOB_RECURSE ${PROJECT_NAME}_CLI_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/cli/*.
 
 add_executable(${PROJECT_NAME}-cli ${${PROJECT_NAME}_CLI_SOURCES})
 target_link_libraries(${PROJECT_NAME}-cli ${PROJECT_NAME} Boost::system)
-target_compile_features(${PROJECT_NAME}-cli PUBLIC cxx_std_17)
+target_compile_features(${PROJECT_NAME}-cli PUBLIC cxx_std_20)
