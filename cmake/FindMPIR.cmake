@@ -4,8 +4,8 @@ find_path(MPIR_INCLUDE_DIRS
 
 find_library(MPIR_LIBRARIES mpir)
 
-add_library(MPIR::gmp UNKNOWN IMPORTED)
-set_target_properties(MPIR::gmp PROPERTIES
+add_library(MPIR::mpir UNKNOWN IMPORTED)
+set_target_properties(MPIR::mpir PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES ${MPIR_INCLUDE_DIRS}
   IMPORTED_LOCATION ${MPIR_LIBRARIES}
 
