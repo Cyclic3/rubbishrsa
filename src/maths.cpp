@@ -67,7 +67,7 @@ namespace rubbishrsa {
     RUBBISHRSA_LOG_TRACE(std::cerr << "Calculating GCD of " << a.str() << " and " << b.str() << std::endl);
 
     if (a <= 0 || b <= 0)
-      throw std::invalid_argument("GCD cannot be computer with non-positive argument!");
+      throw std::invalid_argument("GCD cannot be computed with non-positive argument!");
 
     std::array<bigint, 3>col[2];
 
@@ -167,8 +167,7 @@ next_iter: {}
   }
 
   bigint generate_prime(uint_fast16_t bits) {
-
-    // 1 <<= n == 2^n, giving us a range of 2^(n-2) to 2^(n-1) inclusive
+    // (1 << n) means 2^n, giving us a range of 2^(n-2) to 2^(n-1) inclusive
     //
     // The reason for keeping this half of the desired values is that 2 is the only even prime,
     // so we can save a lot of composite candidates by multiplying by 2 and adding 1
@@ -215,5 +214,112 @@ next_iter: {}
     RUBBISHRSA_LOG_TRACE(std::cerr << "Chose " << ret << " as prime" << std::endl);
 
     return ret;
+  }
+
+  bigint pollard_rho(const bigint& n) {
+    std::vector<std::thread> pool;
+    std::atomic<bool> found = false;
+    bigint result;
+
+    // Using primes will minimise the chance of collision, which means that threads are less likely to do redundant work
+    constexpr static std::array<int, 128> primes{2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283, 293, 307, 311, 313, 317, 331, 337, 347, 349, 353, 359, 367, 373, 379, 383, 389, 397, 401, 409, 419, 421, 431, 433, 439, 443, 449, 457, 461, 463, 467, 479, 487, 491, 499, 503, 509, 521, 523, 541, 547, 557, 563, 569, 571, 577, 587, 593, 599, 601, 607, 613, 617, 619, 631, 641, 643, 647, 653, 659, 661, 673, 677, 683, 691, 701, 709, 719};
+    auto max_threads = std::min(static_cast<size_t>(std::thread::hardware_concurrency()), primes.size());
+    // Do Pollard's rho algorithm with each thread, each with a different polynomial
+    for (size_t i = 0; i < max_threads; ++i) {
+      pool.emplace_back([&, i]() {
+        bigint x = primes[i];
+        bigint y = x;
+        bigint gcd;
+
+        while (!found) {
+          // We are trying to find two elements in the sequence u_n such that u_i is congruent to u_j (mod p), but u_n is not equal to u_i
+          //
+          // With two such elements, we have (as a result of the remainder property of moduli) gcd(|u_i - u_j|, n) is not 1.
+          //
+          // This means that there is some common divisor between them, and the result of this gcd is a factor of n
+          //
+          // We step one position (x) forward by 1, and the other (y) by 2, to increase the size of the tested cycle.
+          //
+          // For some unknown reason, If we pick u_n = u_n^2 + a (mod n) as our random generator, we will find a result quicker.
+
+          // 1 iter for x
+          x = (x*x + 1) % n;
+          // 2 iters for y
+          y = (y*y + 1) % n;
+          y = (y*y + 1) % n;
+
+          // We don't need to worry about both elements being equal (unless it is prime),
+          // as we will happen upon a factor cycle far before that (with high probability)
+          gcd = egcd(bmp::abs(x - y), n).gcd;
+          // If we found something with a non-trivial gcd, that's a factor
+          if (gcd != 1 && !found.exchange(true))
+            result = gcd;
+        }
+      });
+    }
+
+    for (auto& thread : pool)
+      thread.join();
+
+    return result;
+  }
+
+  bigint quadratic_sieve(const bigint& n) {
+    abort();
+
+    // Not a perfect calcuation, but easy to do
+    bmp::mpf_float log_n = bmp::log(bmp::mpf_float{n});
+    bmp::mpf_float bound = bmp::exp(bmp::mpf_float{1/2} * log_n * bmp::log(log_n));
+
+    bigint prime_count_approx{bmp::ceil(bmp::mpf_float{n} / log_n)};
+
+    for (bigint i = 0; i < bound; ++i) {
+
+    }
+  }  
+
+  std::pair<bigint, bigint> factorise_semiprime(const bigint& semiprime) {
+    size_t bits = floor_log2(semiprime);
+
+    // Pollard takes a bit too long when bits >= 83 on my system, and I'll knock off a few "Windows points"
+    if (bits < 70) {
+      auto p = pollard_rho(semiprime);
+      auto q = semiprime / p;
+      return {p, q};
+    }
+    else {
+      auto p = pollard_rho(semiprime);
+      auto q = semiprime / p;
+      return {p, q};
+    }
+  }
+
+  bigint ascii2bigint(std::string_view str) {
+    bigint data = 0;
+    for (auto i : str) {
+      // Cast the character to an unsigned integer type, and add it to the end of the number
+      data <<= 8;
+      data += static_cast<unsigned char>(i);
+    }
+    return data;
+  }
+
+  std::string bigint2ascii(bigint data) {
+    std::string str;
+    str.reserve(2048);
+    // Read the string backwards
+    while (data) {
+      str.push_back(static_cast<char>(data & 0xFF));
+      data >>= 8;
+    }
+    std::reverse(str.begin(), str.end());
+    return str;
+  }
+
+  bigint hex2bigint(std::string_view str) {
+    // A slow way of doing it, but this is not a bottleneck
+    std::string con_str{"0x"};
+    con_str += str;
+    return bigint{con_str};
   }
 }

@@ -2,7 +2,6 @@
 
 //! All the number theory goes in here
 
-// The numeric backend is different between windows and unix:
 #include <boost/multiprecision/gmp.hpp>
 
 namespace rubbishrsa {
@@ -38,4 +37,26 @@ namespace rubbishrsa {
   // Again, exists in our library, but I don't want to cheat
   /// Computes a^(-1) mod n
   bigint modinv(const bigint& a, const bigint& n);
+
+  /// An implementation of Pollard's rho algorithm
+  ///
+  /// @param a: the x^0 term of the polynomial
+  bigint pollard_rho(const bigint& n);
+
+  /// Selects the fastest implemented factorisation algorithm for the given semiprime, and returns the factors
+  std::pair<bigint, bigint> factorise_semiprime(const bigint& semiprime);
+
+  // Some functions that convert between ascii and bigint
+  bigint ascii2bigint(std::string_view str);
+  std::string bigint2ascii(bigint str);
+  bigint hex2bigint(std::string_view hex);
+
+  inline size_t floor_log2(bigint i) {
+    size_t bits = 0;
+    while (i) {
+      i >>= 1;
+      ++bits;
+    }
+    return bits;
+  }
 }

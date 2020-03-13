@@ -2,13 +2,35 @@
 //!
 //! It's a tiny bit hacky, but all UI stuff is...
 
-#include "rubbishrsa/keys.hpp"
-#include "rubbishrsa/log.hpp"
+#include <rubbishrsa/attack.hpp>
+#include <rubbishrsa/keys.hpp>
+#include <rubbishrsa/log.hpp>
 
 #include <boost/program_options.hpp>
 
 #include <fstream>
 #include <iostream>
+
+// A class that handles where the output goes
+class output_handler {
+private:
+  std::unique_ptr<std::ofstream> maybe_outfile;
+  std::ostream* out;
+
+public:
+  std::ostream& get() { return *out; }
+
+  output_handler() { out = &std::cout; }
+  output_handler(const std::string& path) {
+    maybe_outfile = std::make_unique<std::ofstream>(path);
+    if (!*maybe_outfile) {
+      // Since we are only used in main, we can just do the error handling here
+      std::cerr << "ERROR: Could not open private key output file!" << std::endl;
+      exit(-1);
+    }
+    out = maybe_outfile.get();
+  }
+};
 
 namespace po = boost::program_options;
 
@@ -17,37 +39,56 @@ int main(int argc, char** argv) {
 
   uint_fast16_t keysize;
   std::string outfile_path;
-  std::string pubkey_path;
+  std::string inkey_path;
   // A common variable used by the different options to represent how to obtain the target data
   std::string target;
+  std::string min, max;
+  std::string candidates_path;
 
-  po::options_description common_options, gen_options, enc_options, dec_options;
+  po::options_description common_options, gen_options, enc_options, dec_options, crack_options, brute_options;
   {
     common_options.add_options()
-        ("help,h", "Prints a help message");
+        ("help,h", "Prints a help message")
+        ("out,o", po::value(&outfile_path)->value_name("path"), "The file in which the result should be placed instead of printed to the terminal");
 
     gen_options.add_options()
         ("keysize,s", po::value(&keysize)->default_value(2048)->value_name("bits"), "Sets the RSA keysize")
-        ("out,o", po::value(&outfile_path)->value_name("path"), "The file in which the output should be placed instead of printed to the terminal")
-        ("pubkey,p", po::value(&pubkey_path)->value_name("path"), "An optional path to place a generated public key");
+        ("pubkey,p", po::value(&inkey_path)->value_name("path"), "An optional path to place a generated public key");
 
     enc_options.add_options()
-        ("pubkey,p", po::value(&pubkey_path)->value_name("path")->required(), "The path to the public key (private key files can be used as well)")
+        ("pubkey,p", po::value(&inkey_path)->value_name("path")->required(), "The path to the public key")
         ("hex-message,x", po::value(&target)->value_name("num"), "A hexadeciaml number th at will be used as the RSA message. Must be less than the modulus")
         ("message,m", po::value(&target)->value_name("str"), "A text string which must be shorter than keysize/8 that will be used as the RSA message")
-        ("in,i", po::value(&target)->value_name("path"), "The path to the message file, which must be shorter than keysize/8 bytes")
-        ("out,o", po::value(&outfile_path)->value_name("path"), "The file in which the output should be placed instead of printed to the terminal");
+        ("in,i", po::value(&target)->value_name("path"), "The path to the message file, which must be shorter than keysize/8 bytes");
 
     dec_options.add_options()
-        ("privkey,k", po::value(&pubkey_path)->value_name("path")->required(), "The path to the private key")
+        ("privkey,k", po::value(&inkey_path)->value_name("path")->required(), "The path to the private key")
         ("ctext,c", po::value(&target)->value_name("num"), "The cyphertext created by encrypt")
         ("in,i", po::value(&target)->value_name("path"), "The path to the cyphertext file created by encrypt")
-        ("out,o", po::value(&outfile_path)->value_name("path"), "The file in which the plaintext should be placed instead of printed to the terminal")
-        ("hex,x", po::value(&outfile_path)->value_name("path"), "Indicates that the output should be in hexadecimal");
+        ("hex,x", "Indicates that the output should be in hexadecimal");
+
+    crack_options.add_options()
+        ("pubkey,p", po::value(&inkey_path)->value_name("path")->required(), "The path to the public key")
+        ("raw,r", "Indicates that the two factors should be returned (in decimal), instead of incorporated into a private key");
+
+    brute_options.add_options()
+        ("pubkey,p", po::value(&inkey_path)->value_name("path")->required(), "The path to the public key")
+        ("ctext,c", po::value(&target)->value_name("num"), "The cyphertext created by encrypt")
+        ("in,i", po::value(&target)->value_name("path"), "The path to the cyphertext file created by encrypt")
+        ("list,l", po::value(&candidates_path)->value_name("path"), "A file containing all the candidate plaintexts, with newlines between them")
+        ("num,n", "Indicates that the lines in the file are hexadecimal numbers, not text")
+        ("min", po::value(&min)->value_name("num")->default_value("0"), "In the context of a range search, gives the lowest candidate value")
+        ("max", po::value(&max)->value_name("num"), "In the context of a range search, gives the largest candidate value. If missing, we use the modulus")
+        ("hex,x", "Indicates the output should be in hexadecimal, not as text");
   }
 
-  auto print_help = [&]() {
+  // We use a copy capture so that our hidden options go unnoticed
+  auto print_help = [=]() {
     std::cout << "Usage: " << argv[0] << " <mode> <options>" << std::endl
+              << std::endl
+              << "This program takes in a mode (listed below), and options for that mode."
+              << std::endl
+              << "Please note that, due to the nature of the encoding used, private keys can be used in the place of public keys, but (obviously) not the other way around"
               << std::endl
               << "Common options: " << std::endl
               << common_options << std::endl
@@ -57,8 +98,17 @@ int main(int argc, char** argv) {
               << enc_options << std::endl
               << "dec: Decrypts some data" << std::endl
               << dec_options << std::endl
+              << "crack: Factorises public keys" << std::endl
+              << crack_options << std::endl
+              << "brute: Brute forces plaintexts" << std::endl
+              << brute_options << std::endl
               << std::endl;
   };
+
+  // Add in the common_options option to each mode so it doesn't complain
+  for (auto* desc : {&gen_options, &enc_options, &dec_options, &crack_options, &brute_options})
+    for (auto& i : common_options.options())
+      desc->add(i);
 
 
   // Actually parse the arguments
@@ -73,7 +123,10 @@ int main(int argc, char** argv) {
     print_help();
     return 0;
   }
-  else if (std::string_view{argv[1]} == "gen") {
+
+  output_handler out = args.count("out") ? output_handler{outfile_path} : output_handler{};
+
+  if (std::string_view{argv[1]} == "gen") {
     po::variables_map args2;
     po::store(po::command_line_parser(argc - 1, argv + 1)
                                       .options(gen_options)
@@ -87,24 +140,9 @@ int main(int argc, char** argv) {
 
     auto key = rubbishrsa::private_key::generate(keysize);
 
-    // This little bit of code allows us to write the code independently of whether we are writing to the terminal or a file
-    std::unique_ptr<std::ofstream> maybe_outfile;
-    std::ostream* out;
-
-    if (args2.count("out") || args2.count("o")) {
-      maybe_outfile = std::make_unique<std::ofstream>(outfile_path);
-      if (!*maybe_outfile) {
-        std::cerr << "ERROR: Could not open private key output file!" << std::endl;
-        return 1;
-      }
-      out = maybe_outfile.get();
-    }
-    else
-      out = &std::cout;
-
-    key.serialise(*out); // TODO: impl this as json
-    if (pubkey_path.size()) {
-      std::ofstream pubkey_out{pubkey_path};
+    key.serialise(out.get()); // TODO: impl this as json
+    if (inkey_path.size()) {
+      std::ofstream pubkey_out{inkey_path};
       if (!pubkey_out)
         // Don't crash, this is only a warning, as the public key could be generated later
         std::cerr << "WARNING: Could not open public key output file!" << std::endl;
@@ -126,23 +164,20 @@ int main(int argc, char** argv) {
 
     rubbishrsa::public_key key;
     {
-      std::ifstream ifs{pubkey_path};
-      if (!ifs)
-        throw std::invalid_argument("Could not open RSA pubkey");
+      std::ifstream ifs{inkey_path};
+      if (!ifs) {
+        out.get() << "ERROR: Could not open RSA public key" << std::endl;
+        return 1;
+      }
       key = rubbishrsa::public_key::deserialise(ifs);
     }
 
     rubbishrsa::bigint data;
 
     if (args2.count("hex-message"))
-      data = rubbishrsa::bigint("0x" + target);
+      data = rubbishrsa::hex2bigint(target);
     else if (args2.count("message")) {
-      data = 0;
-      for (auto i : target) {
-        // Cast the character to an unsigned integer type, and add it to the end of the number
-        data <<= 8;
-        data += static_cast<unsigned char>(i);
-      }
+      data = rubbishrsa::ascii2bigint(target);
     }
     else /* if (args2.count("in")) */ {
       data = 0;
@@ -161,22 +196,7 @@ int main(int argc, char** argv) {
       return 1;
     }
 
-    // This little bit of code allows us to write the code independently of whether we are writing to the terminal or a file
-    std::unique_ptr<std::ofstream> maybe_outfile;
-    std::ostream* out;
-
-    if (args2.count("out")) {
-      maybe_outfile = std::make_unique<std::ofstream>(outfile_path);
-      if (!*maybe_outfile) {
-        std::cerr << "ERROR: Could not open private key output file!" << std::endl;
-        return 1;
-      }
-      out = maybe_outfile.get();
-    }
-    else
-      out = &std::cout;
-
-    *out << key.raw_encrypt(data).str() << std::endl;
+    out.get() << std::hex << key.raw_encrypt(data) << std::endl;
   }
   else if (std::string_view{argv[1]} == "dec") {
     po::variables_map args2;
@@ -192,24 +212,24 @@ int main(int argc, char** argv) {
 
     rubbishrsa::private_key key;
     {
-      std::ifstream ifs{pubkey_path};
-      if (!ifs)
-        throw std::invalid_argument("Could not open RSA pubkey");
+      std::ifstream ifs{inkey_path};
+      if (!ifs) {
+        out.get() << "ERROR: Could not open RSA public key" << std::endl;
+        return 1;
+      }
       key = rubbishrsa::private_key::deserialise(ifs);
     }
 
     rubbishrsa::bigint data;
 
-    if (args2.count("ctext")) {
-      data = rubbishrsa::bigint{target};
-    }
+    if (args2.count("ctext"))
+      data = rubbishrsa::hex2bigint(target);
     else /* if (args2.count("in")) */ {
-      data = 0;
       std::ifstream in{target};
 
       std::string num;
       std::getline(in, num);
-      data = rubbishrsa::bigint{num};
+      data = rubbishrsa::hex2bigint(num);
     }
 
     RUBBISHRSA_LOG_INFO(std::cerr << "Decrypting " << std::hex << data << std::endl);
@@ -219,41 +239,108 @@ int main(int argc, char** argv) {
       return 1;
     }
 
-    // This little bit of code allows us to write the code independently of whether we are writing to the terminal or a file
-    std::unique_ptr<std::ofstream> maybe_outfile;
-    std::ostream* out;
-
-    if (args2.count("out")) {
-      maybe_outfile = std::make_unique<std::ofstream>(outfile_path);
-      if (!*maybe_outfile) {
-        std::cerr << "ERROR: Could not open private key output file!" << std::endl;
-        return 1;
-      }
-      out = maybe_outfile.get();
-    }
-    else
-      out = &std::cout;
-
     auto result = key.raw_decrypt(data);
 
-    if (args2.count("x")) {
-      *out << std::hex << result << std::endl;
+    if (args2.count("hex-message"))
+      out.get() << std::hex << result << std::endl;
+    else
+      out.get() << rubbishrsa::bigint2ascii(result) << std::endl;
+  }
+  else if (std::string_view{argv[1]} == "crack") {
+    po::variables_map args2;
+    po::store(po::command_line_parser(argc - 1, argv + 1)
+                                      .options(crack_options)
+                                      .run(), args2);
+    po::notify(args2);
+
+    rubbishrsa::public_key key;
+    {
+      std::ifstream ifs{inkey_path};
+
+      if (!ifs) {
+        out.get() << "ERROR: Could not open RSA public key" << std::endl;
+        return 1;
+      }
+      key = rubbishrsa::public_key::deserialise(ifs);
+    }
+
+    if (args2.count("raw")) {
+      auto fact = rubbishrsa::factorise_semiprime(key.n);
+      out.get() << fact.first << std::endl << fact.second << std::endl;
     }
     else {
-      std::string message;
-      // Read the string backwards
-      while (result) {
-        message.push_back(static_cast<char>(result & 0xFF));
-        result >>= 8;
-      }
-      std::reverse(message.begin(), message.end());
-      *out << message << std::endl;
+      auto k = rubbishrsa::attack::crack_key(key);
+      k.serialise(out.get());
+    }
+  }
+  else if (std::string_view{argv[1]} == "brute") {
+    po::variables_map args2;
+    po::store(po::command_line_parser(argc - 1, argv + 1)
+                                      .options(brute_options)
+                                      .run(), args2);
+    po::notify(args2);
+
+    if (args2.count("ctext") + args2.count("in") != 1) {
+      std::cerr << "ERROR: Exactly one of --ctext, --in must be specified!" << std::endl;
+      return 1;
+    }
+    // For various API reasons, we cannot check if a defaulted argument was given
+    if ((args2.count("max")) && (args2.count("list") || args2.count("num"))) {
+      std::cerr << "ERROR: Invalid option combination!" << std::endl;
+      return 1;
     }
 
+    rubbishrsa::public_key key;
+    {
+      std::ifstream ifs{inkey_path};
+      if (!ifs) {
+        out.get() << "ERROR: Could not open RSA public key" << std::endl;
+        return 1;
+      }
+      key = rubbishrsa::public_key::deserialise(ifs);
+    }
 
+    rubbishrsa::bigint cyphertext;
+
+    if (args2.count("ctext"))
+      cyphertext = rubbishrsa::hex2bigint(target);
+    else /* if (args2.count("in")) */ {
+      std::ifstream in{target};
+
+      std::string num;
+      std::getline(in, num);
+      cyphertext = rubbishrsa::hex2bigint(num);
+    }
+
+    std::optional<rubbishrsa::bigint> result;
+
+    // Are we in range mode?
+    if (args2.count("list")) {
+      std::ifstream ifs{candidates_path};
+      if (!ifs) {
+        std::cerr << "ERROR: Could not open candidates file!" << std::endl;
+        return 1;
+      }
+      // XXX: may not work on Windows due to CRLF bs
+      result = rubbishrsa::attack::brute_force_ptext(key, cyphertext, ifs, '\n', args2.count("num"));
+    }
+    else
+      result = rubbishrsa::attack::brute_force_ptext(key, cyphertext, rubbishrsa::hex2bigint(min),
+                                                     args2.count("max") ? rubbishrsa::hex2bigint(max) : key.n);
+
+    if (result) {
+      if (args.count("hex"))
+        out.get() << std::hex << *result << std::endl;
+      else
+        out.get() << rubbishrsa::bigint2ascii(*result) << std::endl;
+    }
+    else {
+      std::cerr << "ERROR: Could not crack the cyphertext!" << std::endl;
+      return 1;
+    }
   }
   else {
-    std::cerr << "Unknown mode '" << argv[1] << '\'' << std::endl << std::endl;
+    std::cerr << "ERROR: Unknown mode '" << argv[1] << '\'' << std::endl << std::endl;
     print_help();
   }
 
