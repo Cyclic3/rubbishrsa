@@ -11,6 +11,8 @@
 #include <fstream>
 #include <iostream>
 
+namespace po = boost::program_options;
+
 // A class that handles where the output goes
 class output_handler {
 private:
@@ -32,7 +34,65 @@ public:
   }
 };
 
-namespace po = boost::program_options;
+rubbishrsa::bigint read_hex_input(const std::string& not_file_indicator, const po::variables_map& args2) {
+  rubbishrsa::bigint data;
+
+  if (args2.count(not_file_indicator)) {
+    data = rubbishrsa::hex2bigint(args2.at(not_file_indicator).as<std::string>());
+  }
+  else {
+    std::ifstream in{args2.at("in").as<std::string>()};
+    if (!in) {
+      std::cerr << "ERROR: Cannot open input file!" << std::endl;
+      exit(1);
+    }
+    in >> std::hex >> data;
+  }
+
+  return data;
+}
+
+rubbishrsa::bigint read_message(const po::variables_map& args2) {
+  rubbishrsa::bigint data;
+
+  if (args2.count("message")){
+    if (args2.count("hex"))
+      data = rubbishrsa::hex2bigint(args2.at("message").as<std::string>());
+    else
+      data = rubbishrsa::ascii2bigint(args2.at("message").as<std::string>());
+  }
+  else {
+    std::ifstream in{args2.at("in").as<std::string>()};
+    if (!in) {
+      std::cerr << "ERROR: Cannot open input file!" << std::endl;
+      exit(1);
+    }
+    if (args2.count("hex"))
+      in >> std::hex >> data;
+    else
+      data = rubbishrsa::ascii2bigint(in);
+  }
+
+  return data;
+}
+
+rubbishrsa::public_key read_pubkey(const po::variables_map& args2) {
+  std::ifstream ifs{args2.at("pubkey").as<std::string>()};
+  if (!ifs) {
+    std::cerr << "ERROR: Could not open RSA public key" << std::endl;
+    exit(1);
+  }
+  return rubbishrsa::public_key::deserialise(ifs);
+}
+
+rubbishrsa::private_key read_privkey(const po::variables_map& args2) {
+  std::ifstream ifs{args2.at("privkey").as<std::string>()};
+  if (!ifs) {
+    std::cerr << "ERROR: Could not open RSA private key" << std::endl;
+    exit(1);
+  }
+  return rubbishrsa::private_key::deserialise(ifs);
+}
 
 int main(int argc, char** argv) {
   // Here we will set up our options
@@ -45,7 +105,7 @@ int main(int argc, char** argv) {
   std::string min, max;
   std::string candidates_path;
 
-  po::options_description common_options, gen_options, enc_options, dec_options, crack_options, brute_options;
+  po::options_description common_options, gen_options, enc_options, dec_options, crack_options, brute_options, sign_options, verify_options, spam_options;
   {
     common_options.add_options()
         ("help,h", "Prints a help message")
@@ -56,30 +116,49 @@ int main(int argc, char** argv) {
         ("pubkey,p", po::value(&inkey_path)->value_name("path"), "An optional path to place a generated public key");
 
     enc_options.add_options()
+        ("hex,x", po::value(&target)->value_name("num"), "Indicates that the message is in hexadecimal, not text")
         ("pubkey,p", po::value(&inkey_path)->value_name("path")->required(), "The path to the public key")
-        ("hex-message,x", po::value(&target)->value_name("num"), "A hexadeciaml number th at will be used as the RSA message. Must be less than the modulus")
-        ("message,m", po::value(&target)->value_name("str"), "A text string which must be shorter than keysize/8 that will be used as the RSA message")
-        ("in,i", po::value(&target)->value_name("path"), "The path to the message file, which must be shorter than keysize/8 bytes");
+        ("message,m", po::value(&target)->value_name("str"), "A text (or hexadecimal) string that will be used as the RSA message")
+        ("in,i", po::value(&target)->value_name("path"), "The path to the message file");
 
     dec_options.add_options()
+        ("hex,x", "Indicates that the output should be in hexadecimal")
         ("privkey,k", po::value(&inkey_path)->value_name("path")->required(), "The path to the private key")
         ("ctext,c", po::value(&target)->value_name("num"), "The cyphertext created by encrypt")
-        ("in,i", po::value(&target)->value_name("path"), "The path to the cyphertext file created by encrypt")
-        ("hex,x", "Indicates that the output should be in hexadecimal");
+        ("in,i", po::value(&target)->value_name("path"), "The path to the cyphertext file created by encrypt");
+
+    sign_options.add_options()
+        ("hex,x", "Indicates that the message is in hexadecimal, not text")
+        ("privkey,k", po::value(&inkey_path)->value_name("path")->required(), "The path to the private key")
+        ("message,m", po::value(&target)->value_name("str"), "A text (or hexadecimal) string that will be used as the RSA message")
+        ("in,i", po::value(&target)->value_name("path"), "The path to the message file");
+
+    verify_options.add_options()
+        ("hex,x", "Indicates that the output should be in hexadecimal. Without this options, invisible characters can be added to the end of the string to fake signatures")
+        ("pubkey,p", po::value(&inkey_path)->value_name("path")->required(), "The path to the public key")
+        ("sig,s", po::value(&target)->value_name("num"), "The cyphertext created by encrypt")
+        ("in,i", po::value(&target)->value_name("path"), "The path to the cyphertext file created by encrypt");
 
     crack_options.add_options()
-        ("pubkey,p", po::value(&inkey_path)->value_name("path")->required(), "The path to the public key")
-        ("raw,r", "Indicates that the two factors should be returned (in decimal), instead of incorporated into a private key");
+        ("hex,x", "Indicates that the two factors should be returned (in decimal), instead of incorporated into a private key")
+        ("pubkey,p", po::value(&inkey_path)->value_name("path")->required(), "The path to the public key");
 
     brute_options.add_options()
+        ("hex,x", "Indicates the output should be in hexadecimal, not as text")
         ("pubkey,p", po::value(&inkey_path)->value_name("path")->required(), "The path to the public key")
         ("ctext,c", po::value(&target)->value_name("num"), "The cyphertext created by encrypt")
         ("in,i", po::value(&target)->value_name("path"), "The path to the cyphertext file created by encrypt")
         ("list,l", po::value(&candidates_path)->value_name("path"), "A file containing all the candidate plaintexts, with newlines between them")
         ("num,n", "Indicates that the lines in the file are hexadecimal numbers, not text")
         ("min", po::value(&min)->value_name("num")->default_value("0"), "In the context of a range search, gives the lowest candidate value")
-        ("max", po::value(&max)->value_name("num"), "In the context of a range search, gives the largest candidate value. If missing, we use the modulus")
-        ("hex,x", "Indicates the output should be in hexadecimal, not as text");
+        ("max", po::value(&max)->value_name("num"), "In the context of a range search, gives the largest candidate value. If missing, we use the modulus");
+
+    spam_options.add_options()
+        ("hex,x",  "Indicates that the message is in hexadecimal, not text")
+        ("pubkey,p", po::value(&inkey_path)->value_name("path")->required(), "The path to the public key")
+        ("invisible,u", "Indicates that invisible characters are allowed")
+        ("message,m", po::value(&target)->value_name("str"), "A text (or hexadecimal) string that will be used as the RSA message")
+        ("in,i", po::value(&target)->value_name("path"), "The path to the message file");
   }
 
   // We use a copy capture so that our hidden options go unnoticed
@@ -98,6 +177,10 @@ int main(int argc, char** argv) {
               << enc_options << std::endl
               << "dec: Decrypts some data" << std::endl
               << dec_options << std::endl
+              << "sign: Signs some data" << std::endl
+              << enc_options << std::endl
+              << "verify: Verifies as signature" << std::endl
+              << dec_options << std::endl
               << "crack: Factorises public keys" << std::endl
               << crack_options << std::endl
               << "brute: Brute forces plaintexts" << std::endl
@@ -106,7 +189,7 @@ int main(int argc, char** argv) {
   };
 
   // Add in the common_options option to each mode so it doesn't complain
-  for (auto* desc : {&gen_options, &enc_options, &dec_options, &crack_options, &brute_options})
+  for (auto* desc : {&gen_options, &enc_options, &dec_options, &crack_options, &brute_options, &sign_options, &verify_options})
     for (auto& i : common_options.options())
       desc->add(i);
 
@@ -126,7 +209,9 @@ int main(int argc, char** argv) {
 
   output_handler out = args.count("out") ? output_handler{outfile_path} : output_handler{};
 
-  if (std::string_view{argv[1]} == "gen") {
+  std::string_view mode{argv[1]};
+
+  if (mode == "gen") {
     po::variables_map args2;
     po::store(po::command_line_parser(argc - 1, argv + 1)
                                       .options(gen_options)
@@ -134,7 +219,7 @@ int main(int argc, char** argv) {
     po::notify(args2);
 
     if (keysize < 16) {
-      std::cerr << "ERROR: RSA needs a few digits difference in length to be secure, and < 16 bits will ask for a negative number of bits. Sorry" << std::endl;
+      std::cerr << "ERROR: RSA needs a few digits difference in length to be secure, and < 16 bits may ask for a negative number of bits. Sorry" << std::endl;
       return 1;
     }
 
@@ -150,7 +235,7 @@ int main(int argc, char** argv) {
         static_cast<rubbishrsa::public_key>(key).serialise(pubkey_out);
     }
   }
-  else if (std::string_view{argv[1]} == "enc") {
+  else if (mode == "enc") {
     po::variables_map args2;
     po::store(po::command_line_parser(argc - 1, argv + 1)
                                       .options(enc_options)
@@ -162,32 +247,8 @@ int main(int argc, char** argv) {
       return 1;
     }
 
-    rubbishrsa::public_key key;
-    {
-      std::ifstream ifs{inkey_path};
-      if (!ifs) {
-        out.get() << "ERROR: Could not open RSA public key" << std::endl;
-        return 1;
-      }
-      key = rubbishrsa::public_key::deserialise(ifs);
-    }
-
-    rubbishrsa::bigint data;
-
-    if (args2.count("hex-message"))
-      data = rubbishrsa::hex2bigint(target);
-    else if (args2.count("message")) {
-      data = rubbishrsa::ascii2bigint(target);
-    }
-    else /* if (args2.count("in")) */ {
-      data = 0;
-      std::ifstream in{target};
-      // Keep going until the end of the file
-      while (!in.eof()) {
-        data <<= 8;
-        data += in.get();
-      }
-    }
+    rubbishrsa::public_key key = read_pubkey(args2);
+    rubbishrsa::bigint data = read_message(args2);
 
     RUBBISHRSA_LOG_INFO(std::cerr << "Encrypting " << std::hex << data << std::endl);
 
@@ -198,7 +259,7 @@ int main(int argc, char** argv) {
 
     out.get() << std::hex << key.raw_encrypt(data) << std::endl;
   }
-  else if (std::string_view{argv[1]} == "dec") {
+  else if (mode == "dec") {
     po::variables_map args2;
     po::store(po::command_line_parser(argc - 1, argv + 1)
                                       .options(dec_options)
@@ -210,27 +271,8 @@ int main(int argc, char** argv) {
       return 1;
     }
 
-    rubbishrsa::private_key key;
-    {
-      std::ifstream ifs{inkey_path};
-      if (!ifs) {
-        out.get() << "ERROR: Could not open RSA public key" << std::endl;
-        return 1;
-      }
-      key = rubbishrsa::private_key::deserialise(ifs);
-    }
-
-    rubbishrsa::bigint data;
-
-    if (args2.count("ctext"))
-      data = rubbishrsa::hex2bigint(target);
-    else /* if (args2.count("in")) */ {
-      std::ifstream in{target};
-
-      std::string num;
-      std::getline(in, num);
-      data = rubbishrsa::hex2bigint(num);
-    }
+    rubbishrsa::private_key key = read_privkey(args2);
+    rubbishrsa::bigint data = read_hex_input("ctext", args2);
 
     RUBBISHRSA_LOG_INFO(std::cerr << "Decrypting " << std::hex << data << std::endl);
 
@@ -241,39 +283,73 @@ int main(int argc, char** argv) {
 
     auto result = key.raw_decrypt(data);
 
-    if (args2.count("hex-message"))
+    if (args2.count("hex"))
       out.get() << std::hex << result << std::endl;
     else
       out.get() << rubbishrsa::bigint2ascii(result) << std::endl;
   }
-  else if (std::string_view{argv[1]} == "crack") {
+  else if (mode == "sign") {
+    po::variables_map args2;
+    po::store(po::command_line_parser(argc - 1, argv + 1)
+                                      .options(sign_options)
+                                      .run(), args2);
+    po::notify(args2);
+
+    rubbishrsa::private_key key = read_privkey(args2);
+    rubbishrsa::bigint data = read_message(args2);
+
+    RUBBISHRSA_LOG_INFO(std::cerr << "Signing " << std::hex << data << std::endl);
+
+    if (data >= key.n) {
+      std::cout << "ERROR: Message is too big to be signed with a modulus this small!" << std::endl;
+      return 1;
+    }
+
+    auto result = key.raw_sign(data);
+
+    out.get() << std::hex << result << std::endl;
+  }
+  else if (mode == "verify") {
+    po::variables_map args2;
+    po::store(po::command_line_parser(argc - 1, argv + 1)
+                                      .options(verify_options)
+                                      .run(), args2);
+    po::notify(args2);
+
+    rubbishrsa::public_key key = read_pubkey(args2);
+    rubbishrsa::bigint data = read_hex_input("sig", args2);
+
+    if (data >= key.n) {
+      std::cout << "ERROR: Signature too large! Maybe you used the wrong key?" << std::endl;
+      return 1;
+    }
+
+    rubbishrsa::bigint result = key.raw_verify(data);
+
+    if (args2.count("hex"))
+      out.get() << std::hex << result << std::endl;
+    else
+      out.get() << rubbishrsa::bigint2ascii(result) << std::endl;
+  }
+  else if (mode == "crack") {
     po::variables_map args2;
     po::store(po::command_line_parser(argc - 1, argv + 1)
                                       .options(crack_options)
                                       .run(), args2);
     po::notify(args2);
 
-    rubbishrsa::public_key key;
-    {
-      std::ifstream ifs{inkey_path};
+    rubbishrsa::public_key key = read_pubkey(args2);
 
-      if (!ifs) {
-        out.get() << "ERROR: Could not open RSA public key" << std::endl;
-        return 1;
-      }
-      key = rubbishrsa::public_key::deserialise(ifs);
-    }
-
-    if (args2.count("raw")) {
+    if (args2.count("hex")) {
       auto fact = rubbishrsa::factorise_semiprime(key.n);
-      out.get() << fact.first << std::endl << fact.second << std::endl;
+      out.get() << std::hex << fact.first << std::endl << std::hex << fact.second << std::endl;
     }
     else {
       auto k = rubbishrsa::attack::crack_key(key);
       k.serialise(out.get());
     }
   }
-  else if (std::string_view{argv[1]} == "brute") {
+  else if (mode == "brute") {
     po::variables_map args2;
     po::store(po::command_line_parser(argc - 1, argv + 1)
                                       .options(brute_options)
@@ -290,27 +366,9 @@ int main(int argc, char** argv) {
       return 1;
     }
 
-    rubbishrsa::public_key key;
-    {
-      std::ifstream ifs{inkey_path};
-      if (!ifs) {
-        out.get() << "ERROR: Could not open RSA public key" << std::endl;
-        return 1;
-      }
-      key = rubbishrsa::public_key::deserialise(ifs);
-    }
+    rubbishrsa::public_key key = read_pubkey(args2);
 
-    rubbishrsa::bigint cyphertext;
-
-    if (args2.count("ctext"))
-      cyphertext = rubbishrsa::hex2bigint(target);
-    else /* if (args2.count("in")) */ {
-      std::ifstream in{target};
-
-      std::string num;
-      std::getline(in, num);
-      cyphertext = rubbishrsa::hex2bigint(num);
-    }
+    rubbishrsa::bigint data = read_hex_input("ctext", args2);
 
     std::optional<rubbishrsa::bigint> result;
 
@@ -322,10 +380,10 @@ int main(int argc, char** argv) {
         return 1;
       }
       // XXX: may not work on Windows due to CRLF bs
-      result = rubbishrsa::attack::brute_force_ptext(key, cyphertext, ifs, '\n', args2.count("num"));
+      result = rubbishrsa::attack::brute_force_ptext(key, data, ifs, '\n', args2.count("num"));
     }
     else
-      result = rubbishrsa::attack::brute_force_ptext(key, cyphertext, rubbishrsa::hex2bigint(min),
+      result = rubbishrsa::attack::brute_force_ptext(key, data, rubbishrsa::hex2bigint(min),
                                                      args2.count("max") ? rubbishrsa::hex2bigint(max) : key.n);
 
     if (result) {

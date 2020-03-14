@@ -48,6 +48,7 @@ namespace rubbishrsa {
 
   // Some functions that convert between ascii and bigint
   bigint ascii2bigint(std::string_view str);
+  bigint ascii2bigint(std::istream& str);
   std::string bigint2ascii(bigint str);
   bigint hex2bigint(std::string_view hex);
 

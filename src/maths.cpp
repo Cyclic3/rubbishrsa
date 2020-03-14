@@ -306,6 +306,16 @@ next_iter: {}
     return data;
   }
 
+  bigint ascii2bigint(std::istream& in) {
+    bigint data = 0;
+    // Keep going until the end of the file
+    while (!in.eof()) {
+      data <<= 8;
+      data += in.get();
+    }
+    return data;
+  }
+
   std::string bigint2ascii(bigint data) {
     std::string str;
     str.reserve(2048);

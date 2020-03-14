@@ -16,11 +16,9 @@ namespace rubbishrsa {
       // in binary modpow
       return bmp::powm(message, e, n);
     }
-    inline bool raw_verify(const bigint& message, const bigint& signature) const {
+    inline bigint raw_verify(const bigint& signature) const {
       // Note that this is the same as the encryption state, as $m^{k\lambda(n) + 1} \equiv m \pmod{n}$
-      auto expected = bmp::powm(signature, e, n);
-      // Only a valid signature would decrypt to the message
-      return expected == message;
+      return bmp::powm(signature, e, n);
     }
 
     /// Write the key to the given stream
