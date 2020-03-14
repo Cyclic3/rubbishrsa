@@ -118,7 +118,7 @@ namespace rubbishrsa {
 
   // I will use boost random for this stuff, and stl's one doesn't support the bigint
   bool is_prime(const bigint& candidate, uint_fast8_t certainty_log_4) {
-    // We need to get i = 2^exponent * odd
+    // This in an implementation of the Miller-Rabin probabilistic primality test
     bigint odd = candidate;
     size_t exponent = 0;
 
@@ -264,19 +264,20 @@ next_iter: {}
     return result;
   }
 
-  bigint quadratic_sieve(const bigint& n) {
-    abort();
+  // TODO: implement
+//  bigint quadratic_sieve(const bigint& n) {
+//    abort();
 
-    // Not a perfect calcuation, but easy to do
-    bmp::mpf_float log_n = bmp::log(bmp::mpf_float{n});
-    bmp::mpf_float bound = bmp::exp(bmp::mpf_float{1/2} * log_n * bmp::log(log_n));
+//    // Not a perfect calcuation, but easy to do
+//    bmp::mpf_float log_n = bmp::log(bmp::mpf_float{n});
+//    bmp::mpf_float bound = bmp::exp(bmp::mpf_float{1/2} * log_n * bmp::log(log_n));
 
-    bigint prime_count_approx{bmp::ceil(bmp::mpf_float{n} / log_n)};
+//    bigint prime_count_approx{bmp::ceil(bmp::mpf_float{n} / log_n)};
 
-    for (bigint i = 0; i < bound; ++i) {
+//    for (bigint i = 0; i < bound; ++i) {
 
-    }
-  }  
+//    }
+//  }
 
   std::pair<bigint, bigint> factorise_semiprime(const bigint& semiprime) {
     size_t bits = floor_log2(semiprime);
@@ -287,6 +288,7 @@ next_iter: {}
       auto q = semiprime / p;
       return {p, q};
     }
+    // TODO: make this use quadratic sieve
     else {
       auto p = pollard_rho(semiprime);
       auto q = semiprime / p;

@@ -12,7 +12,7 @@ namespace rubbishrsa::attack {
                                           unsigned int thread_count) {
     std::vector<std::thread> pool;
     // Whilst this is technically covered by the optional, it would be faster to just access this
-    std::atomic<bool> found;
+    std::atomic<bool> found = false;
     std::optional<bigint> result;
 
     auto count = thread_count ? thread_count : std::thread::hardware_concurrency();
@@ -36,21 +36,28 @@ namespace rubbishrsa::attack {
                                           std::istream& in, char delim, bool convert_hex_to_num) {
     // Unfortunately, this is inherently sequential, so we have to mutex the whole thing
     std::mutex mutex;
-    std::string line;
     if (convert_hex_to_num) {
       return brute_force_ptext(pubkey, encrypted_message, [&](auto) -> std::optional<bigint> {
+        std::string line;
+        bool is_end;
         // Wait our turn
-        std::unique_lock lock{mutex};
-        std::getline(in, line, delim);
-        return hex2bigint(line);
+        {
+          std::unique_lock lock{mutex};
+          is_end = std::getline(in, line, delim).eof();
+        }
+        return is_end ? std::nullopt : std::optional<bigint>{hex2bigint(line)};
       });
     }
     else {
       return brute_force_ptext(pubkey, encrypted_message, [&](auto) -> std::optional<bigint> {
+        std::string line;
+        bool is_end;
         // Wait our turn
-        std::unique_lock lock{mutex};
-        std::getline(in, line, delim);
-        return ascii2bigint(line);
+        {
+          std::unique_lock lock{mutex};
+          is_end = std::getline(in, line, delim).eof();
+        }
+        return is_end ? std::nullopt : std::optional<bigint>{ascii2bigint(line)};
       });
     }
   }
