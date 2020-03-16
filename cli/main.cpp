@@ -105,7 +105,7 @@ int main(int argc, char** argv) {
   std::string min, max;
   std::string candidates_path;
 
-  po::options_description common_options, gen_options, enc_options, dec_options, crack_options, brute_options, sign_options, verify_options, spam_options;
+  po::options_description common_options, gen_options, enc_options, dec_options, crack_options, brute_options, sign_options, verify_options, forge_options;
   {
     common_options.add_options()
         ("help,h", "Prints a help message")
@@ -153,7 +153,7 @@ int main(int argc, char** argv) {
         ("min", po::value(&min)->value_name("num")->default_value("0"), "In the context of a range search, gives the lowest candidate value")
         ("max", po::value(&max)->value_name("num"), "In the context of a range search, gives the largest candidate value. If missing, we use the modulus");
 
-    spam_options.add_options()
+    forge_options.add_options()
         ("hex,x",  "Indicates that the message is in hexadecimal, not text")
         ("pubkey,p", po::value(&inkey_path)->value_name("path")->required(), "The path to the public key")
         ("invisible,u", "Indicates that invisible characters are allowed")
@@ -185,6 +185,8 @@ int main(int argc, char** argv) {
               << crack_options << std::endl
               << "brute: Brute forces plaintexts" << std::endl
               << brute_options << std::endl
+              << "forge: Forges signatures for small moduli" << std::endl
+              << forge_options << std::endl
               << std::endl;
   };
 
@@ -396,6 +398,34 @@ int main(int argc, char** argv) {
       std::cerr << "ERROR: Could not crack the cyphertext!" << std::endl;
       return 1;
     }
+  }
+  else if (mode == "forge") {
+    po::variables_map args2;
+    po::store(po::command_line_parser(argc - 1, argv + 1)
+                                      .options(forge_options)
+                                      .run(), args2);
+    po::notify(args2);
+
+    rubbishrsa::public_key key = read_pubkey(args2);
+
+    rubbishrsa::bigint data = read_message(args2);
+
+    if (data >= key.n) {
+      std::cout << "ERROR: Message is too big to be signed with a modulus this small!" << std::endl;
+      return 1;
+    }
+
+    std::optional<rubbishrsa::bigint> result;
+
+    if (args2.count("invisible"))
+      result = rubbishrsa::attack::brute_force_sig_invis(key, data);
+    else
+      result = rubbishrsa::attack::brute_force_sig(key, [&](const auto& i) {return i == data;});
+
+    if (!result)
+      std::cerr << "ERROR: Could not find a conforming signature!" << std::endl;
+
+    out.get() << std::hex << *result << std::endl;
   }
   else {
     std::cerr << "ERROR: Unknown mode '" << argv[1] << '\'' << std::endl << std::endl;

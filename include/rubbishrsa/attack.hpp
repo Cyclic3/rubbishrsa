@@ -23,6 +23,9 @@ namespace rubbishrsa::attack {
     return (sig_1 * sig_2) % pubkey.n;
   }
 
+  // Returns true if the given char is invisible
+  bool is_invisible(char);
+
   /// Attempt to factorise the key
   private_key crack_key(const public_key& pubkey);
 
@@ -51,4 +54,13 @@ namespace rubbishrsa::attack {
   /// A simple wrapper that brute forces with all the plaintexts between two numbers (inclusive)
   std::optional<bigint> brute_force_ptext(const public_key& pubkey, const bigint& encrypted_message,
                                           const bigint& min, const bigint& max);
+
+  /// Attempt to brute force the space to find a valid signature.
+  ///
+  /// This can be used to
+  ///
+  /// @param check_result: A function that returns true if a valid result was found. Will be run in parallel
+  std::optional<bigint> brute_force_sig(const public_key& pubkey, std::function<bool(const bigint&)> check_result);
+
+  std::optional<bigint> brute_force_sig_invis(const public_key& pubkey, bigint msg);
 }

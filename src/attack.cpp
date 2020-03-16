@@ -87,4 +87,68 @@ namespace rubbishrsa::attack {
     auto factors = factorise_semiprime(pubkey.n);
     return private_key::from_factors(factors.first, factors.second, pubkey.e);
   }
+
+  bool is_invisible(char c) {
+    // Uninitialised values in a initialised array are set to zero (false)
+    static bool arr[256] = {
+      true, true, true, true, true, true, true, true,
+      false /*bcksp*/, false /* tab */, false /* LF */, false /*vtab*/, false /* form feed */, false /* CR */, true, true,
+      true, true, true, true, true, true, true, true,
+      true, true, true, false /* escape leads to nasty console stuff */, true, true, true, true
+    };
+    return arr[static_cast<unsigned char>(c)];
+  }
+
+  std::optional<bigint> brute_force_sig(const public_key& pubkey, std::function<bool(const bigint&)> check_result) {
+    std::vector<std::thread> pool;
+    // Whilst this is technically covered by the optional, it would be faster to just access this
+    std::atomic<bool> found = false;
+    std::optional<bigint> result;
+
+    auto count = std::thread::hardware_concurrency();
+
+    for (unsigned int i = 0; i < count; ++i) {
+      pool.emplace_back([&, i]() {
+        bigint guess = i;
+        for (bigint guess = i; !found && i < pubkey.n; guess += count)
+          if (check_result(pubkey.raw_verify(guess)) && !found.exchange(true))
+            result = guess;
+      });
+    }
+
+    for (auto& thread : pool)
+      thread.join();
+
+    return result;
+  }
+
+  std::optional<bigint> brute_force_sig_invis(const public_key& pubkey, bigint msg) {
+    // Speed up by making sure all the constant input is visible
+    return rubbishrsa::attack::brute_force_sig(pubkey, [&](const auto& i) -> bool {
+      auto i_cpy = i;
+      auto data_cpy = msg;
+      while (true) {
+        char i_c;
+        // We should skip all invisible candidates
+        while (is_invisible(i_c = static_cast<char>(i_cpy & 0xFF))) {
+          // If we have run out of chars in our candidate, check the data to see if that is empty too
+          if (!i_cpy)
+            return data_cpy == 0;
+          i_cpy >>= 8;
+        }
+        // If we have run out of data chars, but not out of test chars, then we failed
+        if (!data_cpy)
+          return false;
+        char data_c = static_cast<char>(data_cpy & 0xFF);
+
+        // If the char differs, then it is not equal up to visibility
+        if (i_c != data_c)
+          return false;
+        else {
+          data_cpy >>= 8;
+          i_cpy >>= 8;
+        }
+      }
+    });
+  }
 }
