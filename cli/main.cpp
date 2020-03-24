@@ -96,7 +96,6 @@ rubbishrsa::private_key read_privkey(const po::variables_map& args2) {
 
 int main(int argc, char** argv) {
   // Here we will set up our options
-
   uint_fast16_t keysize;
   std::string outfile_path;
   std::string inkey_path;
